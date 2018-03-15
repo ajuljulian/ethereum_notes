@@ -1,0 +1,69 @@
+# Tutorial from https://github.com/ethereum/go-ethereum/wiki/Contract-Tutorial
+
+# Compiling the contract using the solidity compiler
+> solc --abi contracts/greeter.sol > contracts/greeter.abi.json
+> solc --bin contracts/greeter.sol > contracts/greeter.bin
+
+
+# Compile and deploy contract using Remix 
+1) Starting geth...
+# Start geth pointing to the rinkeby network.  
+# Enable JSON-RPC on localhost port 8545
+# Enable the web3, eth, net, personal APIs
+# Point to the specified data directory
+> geth --rinkeby --rpc --rpcaddr "localhost" --rpcport "8545" --rpcapi "web3,eth,net,personal" --rpccorsdomain "*" --verbosity "0" --datadir "~/Development/ethereum/data"  console
+
+2) Go to remix.ethereum.org
+3) Using the “Compile” tab, compile the contract
+4) Go to the “Run” tab and choose “Web Provider” under “Environment”
+5) Choose the correct account (should match one of the accounts that gets returned by personal.listAccounts on the console).  Make sure it has funds for gas.
+6) In the console, unlock the account you’re going to use 
+    > personal.unlockAccount(eth.accounts[0])
+7) In Remix, under the “Run” tab, create the contract 
+8) Wait for the transaction to process and get its transaction hash
+9) Go to rinkeby.etherscan.io and check the transaction hash for the contract address
+10) In the console, check for the contract:
+> eth.getCode("<contract address>")
+
+# Executing a contract through geth
+console> var abi = <abi of contract>
+console> var address = "<address of contract>"
+console> var foo_contract = eth.contract(abi).at(address)
+console> foo_contract.bar()
+
+# Get contract's abi definition and address (all someone would need to interact with it)
+console> foo_contract.abi
+console> foo_contract.address
+
+# Remove the contract (you may need to unlock the account paying for the gas)
+console> foo_contract.kill.sendTransaction({from: eth.accounts[0]})
+console> eth.getCode(foo_contract.address) <- should return "0x"
+
+
+## Compile and deploy contract using geth
+> echo "var tokenOutput=`solc --optimize --combined-json abi,bin,interface contracts/token.sol`" > contracts/token.js
+
+console> loadScript('contracts/token.js')
+console> var tokenContractAbi = tokenOutput.contracts['contracts/token.sol:token'].abi
+console> var tokenContract = eth.contract(JSON.parse(tokenContractAbi))
+console> var tokenBinCode = "0x" + tokenOutput.contracts['contracts/token.sol:token'].bin
+console> miner.start(1)
+console> personal.unlockAccount(eth.accounts[0])
+console> var deployTransactionObject = { from: eth.accounts[0], data: tokenBinCode, gas: 1000000 };
+console> var token = tokenContract.new(10000, deployTransactionObject)
+console> eth.getTransactionReceipt(token.transactionHash);
+
+console> token.coinBalanceOf(eth.accounts[0])
+
+## Set up event watcher to be notified every time someone sends coins using this contract:
+var event = token.CoinTransfer({}, '', function(error, result){
+  if (!error)
+    console.log("Coin transfer: " + result.args.amount + " tokens were sent. Balances now are as following: \n Sender:\t" + result.args.sender + " \t" + token.coinBalanceOf.call(result.args.sender) + " tokens \n Receiver:\t" + result.args.receiver + " \t" + token.coinBalanceOf.call(result.args.receiver) + " tokens" )
+});
+
+# send coins to another account
+console> token.sendCoin(eth.accounts[1], 1000, {from: eth.accounts[0]})
+
+# instantiate token (could be a new geth session)
+token2 = eth.contract([{"constant":false,"inputs":[{"name":"receiver","type":"address"},{"name":"amount","type":"uint256"}],"name":"sendCoin","outputs":[{"name":"sufficient","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"name":"","type":"address"}],"name":"coinBalanceOf","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"inputs":[{"name":"supply","type":"uint256"}],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":false,"name":"sender","type":"address"},{"indexed":false,"name":"receiver","type":"address"},{"indexed":false,"name":"amount","type":"uint256"}],"name":"CoinTransfer","type":"event"}]).at("0xc8e5c4705cf6b11553f871b81fdc1c5a48c5eec4")
+token2.coinBalanceOf(eth.accounts[0])
